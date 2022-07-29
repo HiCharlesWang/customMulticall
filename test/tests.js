@@ -4,7 +4,7 @@ const { ethers } = require('hardhat');
 
 describe("Multicall", () =>{
     beforeEach(async() =>{
-        [owner, addr1] = await ethers.getSigners();
+        [owner, addr1, addr2, addr3] = await ethers.getSigners();
         executeFactory = await ethers.getContractFactory("Execute");
         executeDeployed = await executeFactory.deploy();
         multicallFactory = await ethers.getContractFactory("Multicall");
@@ -41,9 +41,32 @@ describe("Multicall", () =>{
             await expect(multicallDeployed.removeFromMultisig(addr1.address)).to.be.revertedWith('Address is not in the set');
         })
         it("Propose transaction, include hash, set contract and data in mapping", async() =>{
-            const txhash = await multicallDeployed.proposeTransaction(executeDeployed.address, "0x5d029f870000000000000000000000000000000000000000000000000000000000000002");
-            console.log(await multicallDeployed.getContract(txhash))
-            console.log(await multicallDeployed.getData(txhash))
+            await multicallDeployed.proposeTransaction(executeDeployed.address, "0x5d029f870000000000000000000000000000000000000000000000000000000000000002");
+            const txhash = await multicallDeployed.txhashIndex(0)
+            expect(await multicallDeployed.txHashContains(txhash)).to.equal(true);
+            data = await multicallDeployed.getData(txhash)
+            contract = await multicallDeployed.getContract(txhash);
+        })
+        it("Should revert if the same transaction gets proposed twice", async() =>{
+            await multicallDeployed.proposeTransaction(executeDeployed.address, "0x5d029f870000000000000000000000000000000000000000000000000000000000000002");
+            await expect(multicallDeployed.proposeTransaction(executeDeployed.address, "0x5d029f870000000000000000000000000000000000000000000000000000000000000002")).to.be.revertedWith("Is already added")
+        })
+        it("Propose transaction, sign it with 3 wallets, execute it", async() =>{
+            await multicallDeployed.proposeTransaction(executeDeployed.address, "0x5d029f870000000000000000000000000000000000000000000000000000000000000002");
+            const txhash = await multicallDeployed.txhashIndex(0)
+            await multicallDeployed.addToMultisig(addr1.address);
+            await multicallDeployed.addToMultisig(addr2.address);
+            expect(await multicallDeployed.multisigLength()).to.equal(3);
+            expect(await multicallDeployed.signs(txhash)).to.equal(0)
+            await multicallDeployed.signTransactionHash(txhash)
+            await multicallDeployed.connect(addr1).signTransactionHash(txhash)
+            await multicallDeployed.connect(addr2).signTransactionHash(txhash)
+            await expect(multicallDeployed.connect(addr3).signTransactionHash(txhash)).to.be.revertedWith("Address is not auth")
+            expect(await multicallDeployed.multisigLength()).to.equal(3);
+            const tx = await multicallDeployed.executeMultisig(txhash);
+            const wait = await tx.wait();
+            const args = wait.events[0].args
+            expect(parseInt(args)).to.equal(2);
         })
     
 })

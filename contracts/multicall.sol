@@ -1,6 +1,6 @@
 pragma solidity >= 0.8.0;
 
-import "./utils/enumerableSet.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract Multicall is Ownable {
@@ -38,6 +38,8 @@ contract Multicall is Ownable {
     mapping(bytes32 => uint256) public signs;
     mapping(bytes32 => address) public getContract;
     mapping(bytes32 => bytes) public getData;
+
+    event txSent(bytes returnData, bytes32 txHash);
 
     constructor() {
         auth.add(msg.sender);
@@ -79,9 +81,10 @@ contract Multicall is Ownable {
         bytes memory _data = getData[_txHash];
         (bool success, bytes memory returnData) = _contract.call(_data);
         require(success);
+        emit txSent(returnData, _txHash);
         return returnData;
     }
-
+    ///////// Multisig signers ////////////////////
     function addToMultisig(address _addr) external onlyOwner{ // test done
         require(auth.add(_addr) == true, 'Address was already added');
     }
@@ -98,8 +101,18 @@ contract Multicall is Ownable {
         return auth.contains(_addr);
     }
 
-    function txhashIndex(uint256 _index) external returns(bool) {
-        txHashes.at(_index);
+    function multisigLength() external view returns(uint256) { // test done
+        return auth.length();
+    }
+
+    //////////Multisig signers end///////////////////////
+
+    function txhashIndex(uint256 _index) external view returns(bytes32) {
+       return txHashes.at(_index);
+    }
+
+    function txHashContains(bytes32 _txhash) external view returns(bool) {
+        return txHashes.contains(_txhash);
     }
 
     function getCallData(string memory _func, uint256 _arg) external view returns(bytes memory) {
