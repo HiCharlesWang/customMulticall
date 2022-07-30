@@ -25,8 +25,14 @@ describe("Multicall", () =>{
         it("Should call returnTwo", async() =>{
             await multicallDeployed.callOne(executeDeployed.address, "0x946e182c")
         })
+        it("Should execute a multicall",async() =>{
+            await multicallDeployed.call([executeDeployed.address,executeDeployed.address ], ["0x5d029f870000000000000000000000000000000000000000000000000000000000000002", "0x5d029f870000000000000000000000000000000000000000000000000000000000000003"])
+        })
     })
     describe("Multisig", () =>{
+        it("Should set owner to auth during deployment", async() =>{
+            expect(await multicallDeployed.viewMultisigAddress(owner.address)).to.equal(true);
+        })
         it("Should add, remove and display the enumerableSet.AddressSet", async() =>{
             expect(await multicallDeployed.viewMultisigAddress(owner.address)).to.equal(true);
             expect(await multicallDeployed.viewMultisigIndex(0)).to.equal(owner.address);
@@ -67,6 +73,25 @@ describe("Multicall", () =>{
             const wait = await tx.wait();
             const args = wait.events[0].args
             expect(parseInt(args)).to.equal(2);
+        })
+        it("Propose transaction, sign it, revert for double sign", async() =>{
+            await multicallDeployed.proposeTransaction(executeDeployed.address, "0x5d029f870000000000000000000000000000000000000000000000000000000000000002");
+            const txhash = await multicallDeployed.txhashIndex(0)
+            await multicallDeployed.addToMultisig(addr1.address);
+            await multicallDeployed.addToMultisig(addr2.address);
+            await multicallDeployed.signTransactionHash(txhash)
+            await multicallDeployed.connect(addr1).signTransactionHash(txhash)
+            await multicallDeployed.connect(addr2).signTransactionHash(txhash)         
+            await expect(multicallDeployed.connect(addr2).signTransactionHash(txhash)).to.be.revertedWith("only allowed to sign once")
+        })
+        it("Propose transaction, sign, remove sign, remove unsigned sign", async() =>{
+            await multicallDeployed.proposeTransaction(executeDeployed.address, "0x5d029f870000000000000000000000000000000000000000000000000000000000000002");
+            const txhash = await multicallDeployed.txhashIndex(0)
+            await multicallDeployed.addToMultisig(addr1.address);
+            await multicallDeployed.addToMultisig(addr2.address);
+            await multicallDeployed.signTransactionHash(txhash)
+            await expect(multicallDeployed.signTransactionHash(txhash)).to.be.revertedWith("only allowed to sign once")
+            expect (await multicallDeployed.signs(txhash)).to.equal(1)
         })
     
 })
